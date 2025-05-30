@@ -22,7 +22,7 @@ export default function DocumentList({ username }: DocumentListProps) {
       console.log('Fetching documents for user:', username);
       console.log('Hashed username:', hashedUsername);
         const response = await fetch(
-        `https://n8n.bernardolobo.com.br/webhook-test/historico-documentos?username=${encodeURIComponent(hashedUsername)}`,
+        `https://n8n.bernardolobo.com.br/webhook/historico-documentos?username=${encodeURIComponent(hashedUsername)}`,
         {
           method: 'GET',
           mode: 'cors',
@@ -33,14 +33,45 @@ export default function DocumentList({ username }: DocumentListProps) {
           }
         }
       );
-      
-      if (!response.ok) {
+        if (!response.ok) {
         throw new Error('Falha ao buscar documentos');
       }
+
+      // Primeiro, vamos obter o texto da resposta
+      const responseText = await response.text();
+      console.log('Response text:', responseText);
+
+      let documentList: string[] = [];
+
+      // Se a resposta estiver vazia
+      if (!responseText.trim()) {
+        console.log('Resposta vazia do servidor');
+        documentList = [];
+      } else {
+        try {
+          // Tenta fazer parse como JSON primeiro
+          const data = JSON.parse(responseText);
+          if (Array.isArray(data)) {
+            documentList = data;
+          } else if (typeof data === 'string') {
+            // Se for uma string JSON, processa como texto
+            documentList = data
+              .split(/[\r\n,]+/)
+              .map(item => item.trim())
+              .filter(item => item.length > 0);
+          }
+        } catch (jsonError) {
+          // Se não for JSON válido, trata como texto puro
+          console.log('Processando como texto puro');
+          documentList = responseText
+            .split(/[\r\n,]+/)
+            .map(item => item.trim())
+            .filter(item => item.length > 0);
+        }
+      }
       
-      const data = await response.json();
-      console.log('Documents received:', data);
-      setDocuments(Array.isArray(data) ? data : []);
+      console.log('Lista de documentos processada:', documentList);
+      setDocuments(documentList);
       
     } catch (err) {
       console.error('Erro ao buscar documentos:', err);
