@@ -14,52 +14,52 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     try {
+      // Validação dos campos
       if (!username || !password) {
         setError('Please enter both username and password');
         return;
       }
+
+      // Limpa erro anterior
+      setError('');
       
-      // Gera os hashes locais para comparação
-      const localHashedPassword = hex_sha256(password);
-      const localHashedUsername = hex_sha256(username);
+      // Gera os hashes para comparação
+      const hashedPassword = hex_sha256(password);
+      const hashedUsername = hex_sha256(username);
       
-      console.log('Attempting to login...');
-      
-      // Make API call to n8n for authentication
-      const response = await fetch('https://n8n.bernardolobo.com.br/webhook/login', {
+      console.log('Attempting login for user:', username);
+      console.log('Hashed username:', hashedUsername);
+      console.log('Hashed password:', hashedPassword);
+        const response = await fetch('https://n8n.bernardolobo.com.br/webhook/login', {
         method: 'POST',
+        mode: 'cors',
+        credentials: 'omit',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         body: JSON.stringify({
-          username: username, // Envia o username original
-          password: password, // Envia a senha original
-        }),
+          username: hashedUsername,   // Username hasheado para comparação
+          password: hashedPassword          // Senha hasheada para comparação
+        })
       });
 
-      console.log('Response status:', response.status);
-      
-      const responseText = await response.text();
-      console.log('Response body:', responseText);
-      
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('Error parsing response:', parseError);
-        setError('Invalid response from server');
-        return;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-
-      // Verifica se os hashes recebidos correspondem aos hashes locais
-      if (data.hashedUsername === localHashedUsername && 
-          data.hashedPassword === localHashedPassword) {
-        console.log('Login successful, storing token...');
-        await login(data.token);
+        const data = await response.json();
+      
+      if (data.confirmation === "True") {
+        console.log('Login successful');
+        
+        // Armazena o username do usuário autenticado
+        await login(username);
+        
+        // Redireciona para a área principal do app
         router.replace('/(tabs)');
       } else {
-        console.log('Login failed: Hash mismatch');
-        setError('Invalid credentials');
+        // Mostra mensagem de erro
+        setError('Username or password incorrect');
       }
     } catch (err) {
       console.error('Login error:', err);

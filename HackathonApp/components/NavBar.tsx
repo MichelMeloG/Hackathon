@@ -30,8 +30,7 @@ export default function NavBar({ showAuthButtons = false }: NavBarProps) {
         />
         <ThemedText style={styles.title}>AI Legal Assistant</ThemedText>
       </TouchableOpacity>
-      
-      {showAuthButtons ? (
+        {showAuthButtons ? (
         <View style={styles.authButtons}>
           <TouchableOpacity 
             style={[styles.button, styles.loginButton]}
@@ -46,8 +45,7 @@ export default function NavBar({ showAuthButtons = false }: NavBarProps) {
             <ThemedText style={styles.buttonText}>Register</ThemedText>
           </TouchableOpacity>
         </View>
-      ) : (
-        <TouchableOpacity 
+      ) : (        <TouchableOpacity 
           style={[styles.button, styles.logoutButton]}
           onPress={handleLogout}
         >

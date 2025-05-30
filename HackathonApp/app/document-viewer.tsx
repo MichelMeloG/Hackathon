@@ -4,40 +4,154 @@ import { ThemedText } from '@/components/ThemedText';
 import * as DocumentPicker from 'expo-document-picker';
 import { useState } from 'react';
 import { WebView } from 'react-native-webview';
+import { hex_sha256 } from '@/utils/sha256';
+import { useAuth } from '@/hooks/useAuth';
 
 const API_ENDPOINT = 'https://n8n.bernardolobo.com.br/webhook/3262a7a4-87ca-4732-83c7-67d480a02540';
 
 export default function DocumentViewerScreen() {
+  const { username } = useAuth();
   const [pdfUri, setPdfUri] = useState<string | null>(null);
+  const [documentName, setDocumentName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [explanation, setExplanation] = useState('');
   const [messages, setMessages] = useState([
     { text: 'Olá! Como posso ajudar você a entender melhor este documento?', isBot: true }
   ]);
-  const [inputMessage, setInputMessage] = useState('');
+  const [inputMessage, setInputMessage] = useState('');  const formatExplanation = (text: string) => {
+    if (!text) return '';
+    
+    // Remove tags HTML que possam vir na resposta
+    text = text.replace(/<[^>]*>/g, '');
+    
+    // Remove marcadores especiais como ---CLAU. FIM---
+    text = text.replace(/---[^-]*---/g, '');
+    
+    // Remove caracteres especiais extras
+    text = text.replace(/\[|\]|\{|\}/g, '');
+    
+    // Identifica possíveis quebras de parágrafo baseado em pontuação seguida de maiúscula
+    text = text.replace(/([.!?])\s+([A-Z])/g, '$1\n\n$2');
+    
+    // Identifica seções numeradas e adiciona quebras
+    text = text.replace(/(\d+\s*[).:-])\s*/g, '\n\n$1 ');
+    
+    // Identifica cláusulas e adiciona quebras
+    text = text.replace(/\b(CLÁUSULA|Cláusula|Art\.|Artigo)\s+/g, '\n\n$1 ');
+    
+    // Remove múltiplas quebras de linha
+    text = text.replace(/\n{3,}/g, '\n\n');
+    
+    // Limpa espaços extras antes de pontuação
+    text = text.replace(/\s+([.,!?])/g, '$1');
+    
+    // Limpa linhas que contém apenas números ou caracteres especiais
+    const lines = text.split('\n').filter(line => {
+      const cleanLine = line.trim();
+      return cleanLine && !/^\d+$/.test(cleanLine) && !/^[^a-zA-Z0-9]+$/.test(cleanLine);
+    });
+    
+    // Agrupa linhas em parágrafos
+    const paragraphs = lines.reduce((acc: string[], line: string) => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) return acc;
+      
+      // Verifica se é um novo parágrafo ou continuação
+      const isNewParagraph = 
+        /^(CLÁUSULA|Cláusula|Art\.|Artigo|\d+\s*[).:-])/.test(trimmedLine) ||
+        (acc.length > 0 && /[.!?]$/.test(acc[acc.length - 1]));
+      
+      if (isNewParagraph) {
+        acc.push(trimmedLine);
+      } else if (acc.length > 0) {
+        acc[acc.length - 1] += ' ' + trimmedLine;
+      } else {
+        acc.push(trimmedLine);
+      }
+      
+      return acc;
+    }, []);
+    
+    // Formata cada parágrafo
+    const formattedParagraphs = paragraphs
+      .map(p => {
+        let cleaned = p.trim();
+        // Capitaliza a primeira letra se não começar com número ou palavra especial
+        if (!/^(\d|CLÁUSULA|Cláusula|Art\.|Artigo)/.test(cleaned)) {
+          cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+        }
+        return cleaned;
+      })
+      .filter(p => p && p.length > 3);
+    
+    return formattedParagraphs.join('\n\n');
+  };
+
+  const processUploadResponse = async (response: Response) => {
+    try {
+      const responseText = await response.text();
+      console.log('Resposta completa:', responseText);
+
+      if (responseText.trim()) {
+        try {
+          const data = JSON.parse(responseText);
+          console.log('Resposta em formato JSON:', data);
+          const rawExplanation = data?.explanation || data?.result || data?.text || data?.content;
+          
+          if (rawExplanation) {
+            const formattedExplanation = formatExplanation(rawExplanation);
+            setExplanation(formattedExplanation);
+            setMessages(prev => [...prev, {
+              text: 'Documento processado com sucesso! Você pode fazer perguntas sobre ele.',
+              isBot: true
+            }]);
+            return true;
+          }
+        } catch (e) {
+          console.log('Resposta não é JSON, usando texto como explicação');
+          const formattedExplanation = formatExplanation(responseText);
+          setExplanation(formattedExplanation);
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Erro ao processar resposta:', error);
+      return false;
+    }
+  };
+
   const handleUploadDocument = async (fileUri: string) => {
+    if (!username) {
+      Alert.alert('Erro', 'Você precisa estar logado para enviar documentos.');
+      return;
+    }
+
     setIsLoading(true);
-    setExplanation(''); // Limpa a explicação anterior
-    console.log('Iniciando upload do documento:', fileUri);
+    setExplanation('');
     
     try {
       const formData = new FormData();
+      const hashedUsername = hex_sha256(username);
+      
+      formData.append('username', hashedUsername);
       
       if (Platform.OS === 'web') {
         const response = await fetch(fileUri);
         const blob = await response.blob();
-        formData.append('files', blob, 'document.pdf');
+        formData.append('file', blob, documentName + '.pdf');
       } else {
-        formData.append('files', {
+        formData.append('file', {
           uri: fileUri,
           type: 'application/pdf',
-          name: 'document.pdf',
+          name: documentName + '.pdf',
         } as any);
       }
-
-      formData.append('text', 'Por favor, explique este documento jurídico em linguagem simples.');
-
-      console.log('Enviando requisição para:', API_ENDPOINT);
+      
+      formData.append('is_file', 'true');
+      formData.append('nome_documento', documentName);
+      
+      console.log('Enviando documento...');
       
       const response = await fetch(API_ENDPOINT, {
         method: 'POST',
@@ -47,61 +161,41 @@ export default function DocumentViewerScreen() {
         },
       });
 
-      console.log('Status da resposta:', response.status);
-      console.log('Headers da resposta:', Object.fromEntries(response.headers.entries()));
-      
-      const responseText = await response.text();
-      console.log('Resposta completa:', responseText);
-
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}, response: ${responseText}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      if (!responseText.trim()) {
-        const message = 'O documento foi recebido e está sendo processado. Por favor, aguarde um momento e tente novamente.';
-        console.log('Resposta vazia, definindo mensagem padrão:', message);
-        setExplanation(message);
-        return;
-      }
-
-      try {
-        let explanation: string | null = null;
-
-        // Primeiro, tenta fazer o parse do JSON
-        try {
-          const data = JSON.parse(responseText);
-          console.log('Resposta em formato JSON:', data);
-          explanation = data?.explanation || data?.result || data?.text || data?.content;
-        } catch (e) {
-          // Se não for JSON, usa o texto como explicação
-          explanation = responseText;
-        }
-
-        console.log('Explicação extraída:', explanation);
+      // Tenta processar a resposta imediatamente
+      let success = await processUploadResponse(response);
+      
+      // Se não teve sucesso, espera um pouco e tenta novamente
+      if (!success) {
+        console.log('Primeira tentativa não retornou explicação, aguardando e tentando novamente...');
+        setExplanation('Processando documento, por favor aguarde...');
         
-        if (explanation) {
-          console.log('Definindo explicação no estado');
-          setExplanation(explanation);
-          setMessages(prev => [...prev, {
-            text: 'Documento processado com sucesso! Você pode fazer perguntas sobre ele.',
-            isBot: true
-          }]);
-        } else {
-          console.log('Não foi possível extrair a explicação da resposta');
-          setExplanation('Não foi possível processar a resposta do servidor. Por favor, tente novamente.');
+        // Espera 2 segundos e tenta novamente
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        const secondResponse = await fetch(API_ENDPOINT, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+
+        if (!secondResponse.ok) {
+          throw new Error(`HTTP error on retry! status: ${secondResponse.status}`);
         }
-      } catch (e: unknown) {
-        console.error('Erro ao processar resposta:', e);
-        if (typeof responseText === 'string' && responseText.includes('<!DOCTYPE html>')) {
-          throw new Error('O servidor retornou uma página HTML em vez de JSON');
-        } else if (e instanceof Error) {
-          throw new Error(`Erro ao processar resposta: ${e.message}`);
-        } else {
-          throw new Error('Erro desconhecido ao processar resposta');
+
+        success = await processUploadResponse(secondResponse);
+        
+        if (!success) {
+          setExplanation('Não foi possível processar o documento. Por favor, tente novamente.');
         }
       }
     } catch (error: any) {
-      console.error('Erro detalhado:', error);
+      console.error('Erro no upload:', error);
       Alert.alert(
         'Erro no Upload',
         'Não foi possível processar o documento. ' + (error.message || 'Erro desconhecido')
@@ -110,9 +204,7 @@ export default function DocumentViewerScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const pickDocument = async () => {
+  };  const pickDocument = async () => {
     try {
       console.log('Iniciando seleção de documento');
       const result = await DocumentPicker.getDocumentAsync({
@@ -125,7 +217,15 @@ export default function DocumentViewerScreen() {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedFile = result.assets[0];
         console.log('Documento selecionado:', selectedFile.uri);
+        
+        // Remove a extensão .pdf do nome do arquivo, se existir
+        const fileName = selectedFile.name || 'document';
+        const cleanFileName = fileName.toLowerCase().endsWith('.pdf') 
+          ? fileName.slice(0, -4) 
+          : fileName;
+        
         setPdfUri(selectedFile.uri);
+        setDocumentName(cleanFileName);
         await handleUploadDocument(selectedFile.uri);
       }
     } catch (err: any) {
@@ -179,13 +279,44 @@ export default function DocumentViewerScreen() {
     );
   };
 
+  const DocumentExplanationView = ({ explanation }: { explanation: string }) => {
+    if (!explanation) {
+      return (
+        <ThemedView style={styles.emptyExplanation}>
+          <ThemedText style={styles.emptyExplanationText}>
+            A explicação simplificada do documento aparecerá aqui após o processamento.
+          </ThemedText>
+        </ThemedView>
+      );
+    }
+
+    return (
+      <ScrollView style={styles.explanationScrollView}>
+        <ThemedView style={styles.explanationContainer}>
+          <ThemedText style={styles.explanationTitle}>Explicação Simplificada</ThemedText>
+          <ThemedText style={styles.explanationText}>{explanation}</ThemedText>
+        </ThemedView>
+      </ScrollView>
+    );
+  };
+
   return (
     <ThemedView style={styles.container}>
-      {/* Coluna Esquerda - Documento Original */}
-      <ScrollView style={styles.column}>
+      {/* Coluna Esquerda - Documento Original */}      <ScrollView style={styles.column}>
         <ThemedView style={styles.documentContainer}>
           <ThemedText style={styles.columnTitle}>Documento Original</ThemedText>
+            <TextInput
+            style={styles.documentNameInput}
+            placeholder="Nome do documento (preenchido automaticamente)"
+            value={documentName}
+            onChangeText={setDocumentName}
+            placeholderTextColor="#666"
+            maxLength={100}
+            editable={true} // Permite edição manual se necessário
+          />
+          
           {renderPdfViewer()}
+          
           {pdfUri && (
             <TouchableOpacity 
               style={[styles.newFileButton, isLoading && styles.uploadButtonDisabled]} 
@@ -200,26 +331,10 @@ export default function DocumentViewerScreen() {
         </ThemedView>
       </ScrollView>
 
-      {/* Coluna Central - Explicação */}
-      <ScrollView style={styles.column}>
-        <ThemedView style={styles.documentContainer}>
-          <ThemedText style={styles.columnTitle}>Explicação Simplificada</ThemedText>
-          {isLoading ? (
-            <ThemedView style={styles.loadingContainer}>
-              <ThemedText style={styles.loadingText}>
-                Simplificando documento
-              </ThemedText>
-              <ThemedText style={styles.loadingSubtext}>
-                Aguarde...
-              </ThemedText>
-            </ThemedView>
-          ) : (
-            <ThemedText style={styles.documentText}>
-              {explanation || 'Carregue um documento para ver a explicação'}
-            </ThemedText>
-          )}
-        </ThemedView>
-      </ScrollView>
+      {/* Coluna do meio - Explicação */}
+      <ThemedView style={[styles.column, styles.middleColumn]}>
+        <DocumentExplanationView explanation={explanation} />
+      </ThemedView>
 
       {/* Coluna Direita - Chat */}
       <ThemedView style={styles.column}>
@@ -262,11 +377,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#f5f5f5',
   },
+  documentNameInput: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    color: '#2A2A2A',
+  },
   column: {
     flex: 1,
-    borderRightWidth: 1,
-    borderColor: '#e0e0e0',
-    padding: 16,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    margin: 5,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+  },
+  middleColumn: {
+    flex: 2,
+    padding: 0,
+    overflow: 'hidden',
   },
   columnTitle: {
     fontSize: 18,
@@ -381,5 +514,37 @@ const styles = StyleSheet.create({
     color: '#ffffff',  // Texto em branco
     textAlign: 'center',
     opacity: 0.9,  // Sutilmente mais suave que o texto principal
+  },
+  explanationScrollView: {
+    flex: 1,
+    width: '100%',
+  },
+  explanationContainer: {
+    padding: 20,
+    flex: 1,
+  },
+  explanationTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    color: '#333',
+  },  explanationText: {
+    fontSize: 16,
+    lineHeight: 28,
+    color: '#444',
+    textAlign: 'justify',
+    paddingHorizontal: 5,
+    marginBottom: 24,
+  },
+  emptyExplanation: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  emptyExplanationText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
   },
 });
