@@ -24,11 +24,13 @@ export default function RootLayout() {
             <>
               <Stack.Screen name="login" options={{ animation: 'none' }} />
               <Stack.Screen name="register" options={{ animation: 'slide_from_right' }} />
+              <Stack.Screen name="index" options={{ animation: 'none' }} />
             </>
           ) : (
             <>
+              <Stack.Screen name="index" options={{ animation: 'none' }} />
+              <Stack.Screen name="document-viewer" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="document-viewer" />
             </>
           )}
         </Stack>

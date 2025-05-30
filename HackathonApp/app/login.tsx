@@ -54,9 +54,8 @@ export default function LoginScreen() {
         
         // Armazena o username do usuário autenticado
         await login(username);
-        
-        // Redireciona para a área principal do app
-        router.replace('/(tabs)');
+          // Redireciona para a página inicial
+        router.replace('/');
       } else {
         // Mostra mensagem de erro
         setError('Username or password incorrect');
