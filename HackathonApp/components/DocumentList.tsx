@@ -22,7 +22,7 @@ export default function DocumentList({ username }: DocumentListProps) {
       console.log('Fetching documents for user:', username);
       console.log('Hashed username:', hashedUsername);
         const response = await fetch(
-        `https://n8n.bernardolobo.com.br/webhook/historico-documentos?username=${encodeURIComponent(hashedUsername)}`,
+        `https://n8n.bernardolobo.com.br/webhook-test/historico-documentos?username=${encodeURIComponent(hashedUsername)}`,
         {
           method: 'GET',
           mode: 'cors',

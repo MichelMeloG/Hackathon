@@ -50,7 +50,7 @@ export default function DocumentViewerScreen() {
       });
       
       const response = await makeApiRequest(
-        'https://n8n.bernardolobo.com.br/webhook/3262a7a4-87ca-4732-83c7-67d480a02540',
+        'https://n8n.bernardolobo.com.br/webhook-test/3262a7a4-87ca-4732-83c7-67d480a02540',
         {
           username: hashedUsername,
           nome_documento: params.documentName,
