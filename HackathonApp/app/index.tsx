@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { useAuth } from '@/hooks/useAuth';
+import { router } from 'expo-router';
 import DocumentUpload from '@/components/DocumentUpload';
 import DocumentList from '@/components/DocumentList';
 
@@ -25,10 +26,21 @@ export default function HomeScreen() {
       <ThemedText style={styles.subtitle}>
         Simplifique a compreensão de documentos jurídicos
       </ThemedText>
-      
-      <View style={styles.content}>
-        <DocumentUpload username={username} onSuccess={() => {}} />
-        <DocumentList username={username} />
+        <View style={styles.content}>
+        <View style={styles.uploadSection}>
+          <DocumentUpload 
+            username={username} 
+            onSuccess={(documentName) => {
+              router.push({
+                pathname: '/document-viewer',
+                params: { documentName }
+              });
+            }} 
+          />
+        </View>
+        <View style={styles.listSection}>
+          <DocumentList username={username} />
+        </View>
       </View>
     </ThemedView>
   );
@@ -50,11 +62,17 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: 20,
     color: '#ffffff',
   },
   content: {
     flex: 1,
     width: '100%',
+  },
+  uploadSection: {
+    marginBottom: 20,
+  },
+  listSection: {
+    flex: 1,
   },
 });

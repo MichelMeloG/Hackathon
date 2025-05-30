@@ -4,6 +4,8 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { useAuth } from '@/hooks/useAuth';
 import { useState, useEffect } from 'react';
+import { hex_sha256 } from '../utils/sha256';
+import { makeApiRequest } from '../utils/api';
 
 interface Message {
   text: string;
@@ -17,6 +19,12 @@ export default function DocumentViewerScreen() {
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [error, setError] = useState('');
+
+  interface ApiResponse {
+    ok: boolean;
+    status: number;
+    text: string;
+  }
 
   useEffect(() => {
     if (username && params.documentName) {
@@ -32,22 +40,50 @@ export default function DocumentViewerScreen() {
   if (!params.documentName) {
     Alert.alert('Erro', 'Nome do documento não especificado.');
     return null;
-  }
-
-  const fetchDocumentContent = async () => {
+  }  const fetchDocumentContent = async () => {
     try {
-      // Aqui você implementaria a chamada para buscar o conteúdo do documento
-      // Por enquanto, vamos usar um placeholder
+      const hashedUsername = hex_sha256(username);
+      
+      console.log('Buscando documento:', {
+        username: hashedUsername,
+        documentName: params.documentName
+      });
+      
+      const response = await makeApiRequest(
+        'https://n8n.bernardolobo.com.br/webhook/3262a7a4-87ca-4732-83c7-67d480a02540',
+        {
+          username: hashedUsername,
+          nome_documento: params.documentName,
+          is_file: 'false',
+          chatInput: ''
+        }
+      );
+      console.log('Resposta recebida:', response.text);
+      
+      let data;
+      try {
+        data = JSON.parse(response.text);
+      } catch (e) {
+        console.error('Erro ao fazer parse da resposta:', e);
+        throw new Error('Resposta inválida do servidor');
+      }
+      
+      console.log('Dados do documento:', data);
+      
+      // Verifica se há texto no documento
+      if (!data.texto && !data.traducao) {
+        throw new Error('Documento sem conteúdo');
+      }
+      
       setDocumentContent({
-        original: 'Conteúdo original do documento...',
-        translated: 'Conteúdo traduzido do documento...',
+        original: data.texto || 'Não foi possível carregar o texto original.',
+        translated: data.traducao || 'Não foi possível carregar o texto traduzido.',
       });
     } catch (err) {
       console.error('Erro ao buscar conteúdo do documento:', err);
       setError('Não foi possível carregar o documento.');
     }
   };
-
   const handleSendMessage = async () => {
     if (!chatInput.trim()) return;
 
@@ -59,27 +95,37 @@ export default function DocumentViewerScreen() {
     setChatMessages(prev => [...prev, { text: message, isUser: true }]);
 
     try {
-      const response = await fetch('https://n8n.bernardolobo.com.br/webhook-test/3262a7a4-87ca-4732-83c7-67d480a02540', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username,
+      const hashedUsername = hex_sha256(username);
+      
+      console.log('Enviando mensagem:', {
+        username: hashedUsername,
+        documentName: params.documentName,
+        message
+      });      const response = await makeApiRequest(
+        'https://n8n.bernardolobo.com.br/webhook-test/3262a7a4-87ca-4732-83c7-67d480a02540',
+        {
+          username: hashedUsername,
           nome_documento: params.documentName,
           is_file: 'false',
           chatInput: message,
-        }),
-      });
-
-      if (!response.ok) {
+        }
+      );      if (!response.ok) {
+        console.error('Erro na resposta do chat:', response.status, response.text);
         throw new Error('Falha ao enviar mensagem');
       }
 
-      // Aqui você adicionaria a resposta do servidor ao chat
-      // Por enquanto, vamos usar uma resposta placeholder
+      console.log('Resposta do chat:', response.text);
+      
+      let data;
+      try {
+        data = JSON.parse(response.text);
+      } catch (e) {
+        console.error('Erro ao fazer parse da resposta do chat:', e);
+        throw new Error('Resposta inválida do servidor');
+      }
+      
       setChatMessages(prev => [...prev, { 
-        text: 'Resposta do assistente em desenvolvimento...', 
+        text: data.resposta || 'Não foi possível obter resposta do assistente', 
         isUser: false 
       }]);
     } catch (err) {

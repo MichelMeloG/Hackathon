@@ -2,14 +2,21 @@ import React, { useState } from 'react';
 import { StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
+import { router } from 'expo-router';
 import { ThemedView } from './ThemedView';
 import { ThemedText } from './ThemedText';
 import { TextInput } from 'react-native';
 import { hex_sha256 } from '../utils/sha256';
 
 interface DocumentUploadProps {
-  onSuccess: () => void;
+  onSuccess: (documentName: string) => void;
   username: string;
+}
+
+interface UploadResponse {
+  ok: boolean;
+  status: number;
+  text: string;
 }
 
 export default function DocumentUpload({ onSuccess, username }: DocumentUploadProps) {
@@ -98,32 +105,47 @@ export default function DocumentUpload({ onSuccess, username }: DocumentUploadPr
             name: file.name || 'document.pdf',
           } as any);
         }
-      }
-
-      console.log('Enviando arquivo...');
-
-      const response = await fetch(
-        'https://n8n.bernardolobo.com.br/webhook-test/3262a7a4-87ca-4732-83c7-67d480a02540',
-        {
-          method: 'POST',
-          body: formData,
-          headers: {
-            'Accept': '*/*',
-            'Authorization': 'Basic YWRtaW46YWRtaW4='
+      }      console.log('Enviando arquivo...');
+      
+      // Usar XMLHttpRequest em vez de fetch
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', 'https://n8n.bernardolobo.com.br/webhook-test/3262a7a4-87ca-4732-83c7-67d480a02540', true);
+      xhr.setRequestHeader('Authorization', 'Basic YWRtaW46YWRtaW4=');
+      
+      // Configurar handlers de resposta
+      const uploadPromise = new Promise<UploadResponse>((resolve, reject) => {
+        xhr.onload = function() {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve({
+              ok: true,
+              status: xhr.status,
+              text: xhr.responseText
+            });
+          } else {
+            reject(new Error(`HTTP Error: ${xhr.status}`));
           }
-        }
-      );
+        };
+        
+        xhr.onerror = function() {
+          reject(new Error('Network Error'));
+        };
+      });
 
-      const responseText = await response.text();
+      // Enviar o arquivo
+      xhr.send(formData);
+      
+      // Aguardar resposta
+      const response = await uploadPromise;
       console.log('Status:', response.status);
-      console.log('Resposta:', responseText);
-
+      console.log('Resposta:', response.text);
+      
       if (response.ok) {
+        const currentDocumentName = documentName;
         setDocumentName('');
         Alert.alert('Sucesso', 'Documento enviado com sucesso!');
-        onSuccess();
+        onSuccess(currentDocumentName);
       } else {
-        throw new Error(`Erro ${response.status}: ${responseText}`);
+        throw new Error(`Erro ${response.status}: ${response.text}`);
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
