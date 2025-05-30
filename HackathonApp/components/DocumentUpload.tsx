@@ -109,7 +109,7 @@ export default function DocumentUpload({ onSuccess, username }: DocumentUploadPr
       
       // Usar XMLHttpRequest em vez de fetch
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', 'https://n8n.bernardolobo.com.br/webhook-test/3262a7a4-87ca-4732-83c7-67d480a02540', true);
+      xhr.open('POST', 'https://n8n.bernardolobo.com.br/webhook/3262a7a4-87ca-4732-83c7-67d480a02540', true);
       xhr.setRequestHeader('Authorization', 'Basic YWRtaW46YWRtaW4=');
       
       // Configurar handlers de resposta

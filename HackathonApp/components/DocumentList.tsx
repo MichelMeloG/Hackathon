@@ -21,16 +21,17 @@ export default function DocumentList({ username }: DocumentListProps) {
       const hashedUsername = hex_sha256(username);
       console.log('Fetching documents for user:', username);
       console.log('Hashed username:', hashedUsername);
-        const response = await fetch(
-        `https://n8n.bernardolobo.com.br/webhook/historico-documentos?username=${encodeURIComponent(hashedUsername)}`,
+      const response = await fetch(
+        `https://n8n.bernardolobo.com.br/webhook/historico-documentos`,
         {
-          method: 'GET',
+          method: 'POST',
           mode: 'cors',
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*'
-          }
+          },
+          body: JSON.stringify({ username: hashedUsername })
         }
       );
         if (!response.ok) {

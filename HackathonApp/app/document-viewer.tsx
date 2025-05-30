@@ -43,42 +43,48 @@ export default function DocumentViewerScreen() {
   }  const fetchDocumentContent = async () => {
     try {
       const hashedUsername = hex_sha256(username);
-      
       console.log('Buscando documento:', {
         username: hashedUsername,
         documentName: params.documentName
       });
-      
       const response = await makeApiRequest(
-        'https://n8n.bernardolobo.com.br/webhook-test/3262a7a4-87ca-4732-83c7-67d480a02540',
+        'https://n8n.bernardolobo.com.br/webhook/nome-documento',
         {
-          username: hashedUsername,
-          nome_documento: params.documentName,
-          is_file: 'false',
-          chatInput: ''
+          nome_documento: params.documentName
         }
       );
-      console.log('Resposta recebida:', response.text);
-      
+      console.log('Resposta recebida:', response);
       let data;
       try {
         data = JSON.parse(response.text);
+        console.log('Dados do documento:', data);
+        console.log('documento_extraido:', data.documento_extraido);
+        console.log('documento_traduzido:', data.documento_traduzido);
+        if (!data.documento_extraido && !data.documento_traduzido) {
+          throw new Error('Documento sem conteúdo');
+        }
+        setDocumentContent({
+          original: data.documento_extraido || data.texto || 'Não foi possível carregar o texto original.',
+          translated: data.documento_traduzido || data.traducao || 'Não foi possível carregar o texto traduzido.',
+        });
       } catch (e) {
-        console.error('Erro ao fazer parse da resposta:', e);
-        throw new Error('Resposta inválida do servidor');
+        // Se não for JSON, trata como texto puro e separa tradução
+        console.warn('Resposta não é JSON. Usando texto puro e separando tradução.');
+        const text = response.text || '';
+        const traducaoTag = '<INICIO_TRADUCAO_COLQUIAL>';
+        let original = text;
+        let translated = '';
+        if (text.includes(traducaoTag)) {
+          const [orig, trans] = text.split(traducaoTag);
+          original = orig.trim();
+          translated = trans.replace(/<FIM_TRADUCAO_COLQUIAL>.*/s, '').trim();
+        }
+        setDocumentContent({
+          original: original || 'Não foi possível carregar o texto original.',
+          translated: translated || '',
+        });
+        return;
       }
-      
-      console.log('Dados do documento:', data);
-      
-      // Verifica se há texto no documento
-      if (!data.texto && !data.traducao) {
-        throw new Error('Documento sem conteúdo');
-      }
-      
-      setDocumentContent({
-        original: data.texto || 'Não foi possível carregar o texto original.',
-        translated: data.traducao || 'Não foi possível carregar o texto traduzido.',
-      });
     } catch (err) {
       console.error('Erro ao buscar conteúdo do documento:', err);
       setError('Não foi possível carregar o documento.');
