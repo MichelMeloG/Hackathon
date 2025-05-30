@@ -101,39 +101,18 @@ export default function DocumentViewerScreen() {
     setChatMessages(prev => [...prev, { text: message, isUser: true }]);
 
     try {
-      const hashedUsername = hex_sha256(username);
-      
-      console.log('Enviando mensagem:', {
-        username: hashedUsername,
-        documentName: params.documentName,
-        message
-      });      const response = await makeApiRequest(
-        'https://n8n.bernardolobo.com.br/webhook-test/3262a7a4-87ca-4732-83c7-67d480a02540',
+      // Envia para o endpoint do chat
+      const response = await makeApiRequest(
+        'https://n8n.bernardolobo.com.br/webhook/d3b5253d-4b6f-4344-aa52-75818c088922',
         {
-          username: hashedUsername,
-          nome_documento: params.documentName,
-          is_file: 'false',
-          chatInput: message,
+          chat_input: message,
+          nome_documento: params.documentName
         }
-      );      if (!response.ok) {
-        console.error('Erro na resposta do chat:', response.status, response.text);
-        throw new Error('Falha ao enviar mensagem');
-      }
-
-      console.log('Resposta do chat:', response.text);
+      );
       
-      let data;
-      try {
-        data = JSON.parse(response.text);
-      } catch (e) {
-        console.error('Erro ao fazer parse da resposta do chat:', e);
-        throw new Error('Resposta inválida do servidor');
-      }
-      
-      setChatMessages(prev => [...prev, { 
-        text: data.resposta || 'Não foi possível obter resposta do assistente', 
-        isUser: false 
-      }]);
+      // Adiciona a resposta do servidor ao chat
+      const responseText = response.text || JSON.stringify(response);
+      setChatMessages(prev => [...prev, { text: responseText, isUser: false }]);
     } catch (err) {
       console.error('Erro ao enviar mensagem:', err);
       setError('Erro ao enviar mensagem. Por favor, tente novamente.');
